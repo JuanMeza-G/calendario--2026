@@ -359,7 +359,31 @@ body::after  { width: 400px; height: 400px; background: var(--accent2); bottom: 
   animation: fadeUp .18s ease;
 }
 .event-color-bar { width: 3px; height: 28px; border-radius: 3px; background: #c8a96e; flex-shrink: 0; }
+.event-color-bar--fixed { background: linear-gradient(180deg, #4caf50, #1565c0); }
 .event-text      { flex: 1; font-size: .82rem; color: var(--text); word-break: break-word; }
+
+/* Evento fijo del Mundial */
+.event-item--fixed {
+  border-color: rgba(76, 175, 80, 0.3);
+  background: linear-gradient(135deg, rgba(76,175,80,.08), rgba(21,101,192,.06));
+}
+.event-item--fixed:hover {
+  border-color: rgba(76, 175, 80, 0.5);
+  background: linear-gradient(135deg, rgba(76,175,80,.14), rgba(21,101,192,.10));
+}
+.event-fixed-badge {
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: #4caf50;
+  background: rgba(76,175,80,.12);
+  border: 1px solid rgba(76,175,80,.25);
+  border-radius: 6px;
+  padding: 2px 7px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .event-delete {
   background: none;
   border: none;

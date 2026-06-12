@@ -42,10 +42,23 @@ let currentView      = 'month';
 let currentWeekStart = getWeekStart(TODAY);
 let draggedEvent     = null;
 
+// ── Eventos fijos del Mundial 2026 ──
+// Clave de fecha: YYYY-M-D (mes en base 0)
+const FIXED_EVENTS = [
+  { id: 'f1', date: '2026-5-17', text: '🇨🇴 Colombia vs Uzbekistán — 9:00 p. m.', fixed: true },
+  { id: 'f2', date: '2026-5-17', text: '🇵🇹 Portugal vs RD Congo — 12:00 m.',      fixed: true },
+  { id: 'f3', date: '2026-5-23', text: '🇨🇴 Colombia vs RD Congo — 9:00 p. m.',    fixed: true },
+  { id: 'f4', date: '2026-5-23', text: '🇵🇹 Portugal vs Uzbekistán — 12:00 m.',    fixed: true },
+  { id: 'f5', date: '2026-5-27', text: '🇨🇴 Colombia vs Portugal — 6:30 p. m.',    fixed: true },
+  { id: 'f6', date: '2026-5-27', text: '🇵🇹 Portugal vs Colombia — 6:30 p. m.',    fixed: true },
+];
+
 // ── Helpers ──
 function loadEvents(d) {
   const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-  return dbEvents.filter(ev => ev.date === key);
+  const userEvs  = dbEvents.filter(ev => ev.date === key);
+  const fixedEvs = FIXED_EVENTS.filter(ev => ev.date === key);
+  return [...fixedEvs, ...userEvs];
 }
 function sameDay(a, b) {
   return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
@@ -160,11 +173,18 @@ function renderEventList() {
   }
   evs.forEach(ev => {
     const item = document.createElement('div');
-    item.className = 'event-item';
-    item.innerHTML = `
-      <div class="event-color-bar"></div>
-      <span class="event-text">${ev.text}</span>
-      <button class="event-delete" data-id="${ev.id}" aria-label="Eliminar">✕</button>`;
+    item.className = ev.fixed ? 'event-item event-item--fixed' : 'event-item';
+    if (ev.fixed) {
+      item.innerHTML = `
+        <div class="event-color-bar event-color-bar--fixed"></div>
+        <span class="event-text">${ev.text}</span>
+        <span class="event-fixed-badge">⚽ Mundial</span>`;
+    } else {
+      item.innerHTML = `
+        <div class="event-color-bar"></div>
+        <span class="event-text">${ev.text}</span>
+        <button class="event-delete" data-id="${ev.id}" aria-label="Eliminar">✕</button>`;
+    }
     eventList.appendChild(item);
   });
 }
