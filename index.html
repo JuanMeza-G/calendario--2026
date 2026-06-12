@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calendario · Jun–Ago 2026</title>
+  <meta name="description" content="Calendario interactivo desde el 11 de junio hasta el 10 de agosto de 2026." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ═══════ SIDEBAR ═══════ -->
+  <aside class="sidebar">
+    <h1>Jun · Jul · Ago</h1>
+    <p class="subtitle">Del <strong>11 de junio</strong> al <strong>10 de agosto</strong> de 2026</p>
+
+    <div class="sb-divider"></div>
+
+    <p class="sb-label">Leyenda</p>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot dot-today"></div> Hoy</div>
+      <div class="legend-item"><div class="legend-dot dot-end"></div> 10 de agosto</div>
+      <div class="legend-item"><div class="legend-dot dot-range"></div> Rango activo</div>
+      <div class="legend-item"><div class="legend-dot dot-weekend"></div> Fin de semana</div>
+      <div class="legend-item"><div class="legend-dot dot-event"></div> Con evento</div>
+    </div>
+
+    <div class="sb-divider"></div>
+
+    <div class="countdown">
+      <p class="sb-label">Días restantes</p>
+      <span class="number" id="days-left">—</span>
+      <span class="unit">días hasta el 10 de agosto</span>
+    </div>
+
+    <div class="sb-divider"></div>
+
+    <div class="progress-wrap">
+      <p class="sb-label">Progreso del período</p>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progress-fill"></div>
+      </div>
+      <div class="progress-meta">
+        <span>11 jun</span>
+        <span id="pct">0%</span>
+        <span>10 ago</span>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ═══════ MAIN ═══════ -->
+  <main class="main">
+    <div class="widgets-container">
+      <div class="today-events-widget">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+          <p class="sb-label" style="margin-bottom: 0;">Eventos de hoy</p>
+          <button id="manage-today-btn">Gestionar</button>
+        </div>
+        <div class="today-events-list" id="today-events-list"></div>
+      </div>
+
+      <div class="upcoming-events-widget">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+          <p class="sb-label" style="margin-bottom: 0;">Próximos eventos</p>
+        </div>
+        <div class="upcoming-events-list" id="upcoming-events-list"></div>
+      </div>
+    </div>
+    <div class="months" id="months"></div>
+  </main>
+
+  <!-- ═══════ MODAL ═══════ -->
+  <div class="modal-overlay" id="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-date">
+          <span id="modal-day-label">—</span>
+          <small id="modal-day-sub"></small>
+        </div>
+        <button class="modal-close" id="modal-close" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="add-form">
+        <input type="text" id="event-input" placeholder="Agregar evento…" maxlength="80" autocomplete="off" />
+        <button id="event-add-btn">+ Agregar</button>
+      </div>
+      <div class="event-list" id="event-list"></div>
+    </div>
+  </div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
