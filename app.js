@@ -81,10 +81,10 @@ function applyTheme(theme) {
   const icon  = document.getElementById('theme-icon');
   const label = document.getElementById('theme-label');
   if (theme === 'light') {
-    if (icon)  { icon.setAttribute('data-lucide', 'sun');  lucide.createIcons(); }
+    if (icon)  { icon.outerHTML = '<i data-lucide="sun" id="theme-icon"></i>'; lucide.createIcons(); }
     if (label) label.textContent = 'Modo oscuro';
   } else {
-    if (icon)  { icon.setAttribute('data-lucide', 'moon'); lucide.createIcons(); }
+    if (icon)  { icon.outerHTML = '<i data-lucide="moon" id="theme-icon"></i>'; lucide.createIcons(); }
     if (label) label.textContent = 'Modo claro';
   }
   localStorage.setItem('cal_theme', theme);
@@ -358,25 +358,28 @@ function renderWeekView() {
     if (inRange) {
       loadEvents(date).forEach(ev => {
         const card = document.createElement('div');
-        card.className = 'week-event-card';
-        card.draggable = true;
+        card.className = ev.fixed ? 'week-event-card week-event-card--fixed' : 'week-event-card';
+        card.draggable = !ev.fixed;
         card.innerHTML = `<span class="week-event-text">${ev.text}</span>`;
-        card.dataset.id   = ev.id;
-        card.dataset.date = dateStr;
+        
+        if (!ev.fixed) {
+          card.dataset.id   = ev.id;
+          card.dataset.date = dateStr;
 
-        card.addEventListener('dragstart', e => {
-          draggedEvent = { id: ev.id, dateStr };
-          e.dataTransfer.effectAllowed = 'move';
-          setTimeout(() => card.classList.add('dragging'), 0);
-        });
-        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+          card.addEventListener('dragstart', e => {
+            draggedEvent = { id: ev.id, dateStr };
+            e.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => card.classList.add('dragging'), 0);
+          });
+          card.addEventListener('dragend', () => card.classList.remove('dragging'));
+        }
         eventsDiv.appendChild(card);
       });
 
       // Add button
       const addBtnEl = document.createElement('button');
       addBtnEl.className = 'week-add-btn';
-      addBtnEl.textContent = '+ Agregar';
+      addBtnEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:3px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Agregar`;
       addBtnEl.addEventListener('click', () => openModal(date));
       eventsDiv.appendChild(addBtnEl);
 

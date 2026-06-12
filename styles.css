@@ -930,3 +930,13 @@ body::after  { width: 400px; height: 400px; background: var(--accent2); bottom: 
   color: var(--accent);
   background: rgba(124,122,170,.06);
 }
+
+/* Fixed events styling in week view */
+.week-event-card--fixed {
+  border-left-color: var(--end) !important;
+  cursor: default;
+}
+.week-event-card--fixed:hover {
+  transform: none !important;
+  box-shadow: none !important;
+}
