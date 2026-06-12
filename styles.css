@@ -594,8 +594,11 @@ body::after  { width: 400px; height: 400px; background: var(--accent2); bottom: 
 .login-logo {
   font-size: 2.8rem;
   margin-bottom: 16px;
-  display: block;
+  display: flex;
+  justify-content: center;
+  color: var(--accent);
 }
+.login-logo svg, .login-logo i { width: 52px; height: 52px; stroke-width: 1.5; }
 
 .login-title {
   font-size: 1.6rem;

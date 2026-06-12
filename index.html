@@ -15,7 +15,9 @@
   <!-- ═══════ LOGIN SCREEN ═══════ -->
   <div class="login-overlay" id="login-overlay">
     <div class="login-card">
-      <div class="login-logo">📅</div>
+      <div class="login-logo">
+        <i data-lucide="calendar-days"></i>
+      </div>
       <h1 class="login-title">Calendario 2026</h1>
       <p class="login-subtitle">Jun · Jul · Ago</p>
       <p class="login-desc">Inicia sesión para ver y gestionar tus eventos personales.</p>
@@ -28,7 +30,10 @@
         </svg>
         Continuar con Google
       </button>
-      <p class="login-footer">Tus eventos son privados y solo tú puedes verlos.</p>
+      <p class="login-footer">
+        <i data-lucide="lock" style="width:12px;height:12px;vertical-align:middle;margin-right:4px;"></i>
+        Tus eventos son privados y solo tú puedes verlos.
+      </p>
     </div>
   </div>
 
@@ -38,7 +43,10 @@
       <img class="user-avatar" id="user-avatar" src="" alt="Avatar" />
       <div class="user-info">
         <span class="user-name" id="user-name">—</span>
-        <button class="user-logout" id="logout-btn">Cerrar sesión</button>
+        <button class="user-logout" id="logout-btn">
+          <i data-lucide="log-out" style="width:11px;height:11px;"></i>
+          Cerrar sesión
+        </button>
       </div>
     </div>
 
@@ -50,7 +58,7 @@
     <div class="sb-divider"></div>
 
     <button class="theme-toggle" id="theme-toggle" aria-label="Cambiar tema">
-      <span id="theme-icon">🌙</span>
+      <i data-lucide="moon" id="theme-icon"></i>
       <span id="theme-label">Modo claro</span>
     </button>
 
@@ -68,7 +76,10 @@
     <div class="sb-divider"></div>
 
     <div class="countdown">
-      <p class="sb-label">Días restantes</p>
+      <p class="sb-label">
+        <i data-lucide="timer" style="width:13px;height:13px;vertical-align:middle;margin-right:4px;"></i>
+        Días restantes
+      </p>
       <span class="number" id="days-left">—</span>
       <span class="unit">días hasta el 10 de agosto</span>
     </div>
@@ -76,7 +87,10 @@
     <div class="sb-divider"></div>
 
     <div class="progress-wrap">
-      <p class="sb-label">Progreso del período</p>
+      <p class="sb-label">
+        <i data-lucide="bar-chart-2" style="width:13px;height:13px;vertical-align:middle;margin-right:4px;"></i>
+        Progreso del período
+      </p>
       <div class="progress-bar-bg">
         <div class="progress-bar-fill" id="progress-fill"></div>
       </div>
@@ -93,14 +107,23 @@
     <div class="widgets-container">
       <div class="today-events-widget">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
-          <p class="sb-label" style="margin-bottom:0;">Eventos de hoy</p>
-          <button id="manage-today-btn">Gestionar</button>
+          <p class="sb-label" style="margin-bottom:0;">
+            <i data-lucide="calendar-check" style="width:13px;height:13px;vertical-align:middle;margin-right:4px;"></i>
+            Eventos de hoy
+          </p>
+          <button id="manage-today-btn">
+            <i data-lucide="settings-2" style="width:13px;height:13px;vertical-align:middle;margin-right:4px;"></i>
+            Gestionar
+          </button>
         </div>
         <div class="today-events-list" id="today-events-list"></div>
       </div>
       <div class="upcoming-events-widget">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
-          <p class="sb-label" style="margin-bottom:0;">Próximos eventos</p>
+          <p class="sb-label" style="margin-bottom:0;">
+            <i data-lucide="clock" style="width:13px;height:13px;vertical-align:middle;margin-right:4px;"></i>
+            Próximos eventos
+          </p>
         </div>
         <div class="upcoming-events-list" id="upcoming-events-list"></div>
       </div>
@@ -109,13 +132,21 @@
     <!-- View Controls -->
     <div class="view-controls">
       <div class="view-toggle">
-        <button class="view-btn active" id="btn-month-view">📅 Mes</button>
-        <button class="view-btn" id="btn-week-view">📋 Semana</button>
+        <button class="view-btn active" id="btn-month-view">
+          <i data-lucide="grid-3x3" style="width:14px;height:14px;"></i> Mes
+        </button>
+        <button class="view-btn" id="btn-week-view">
+          <i data-lucide="layout-list" style="width:14px;height:14px;"></i> Semana
+        </button>
       </div>
       <div class="week-nav" id="week-nav" style="display:none;">
-        <button class="week-nav-btn" id="prev-week">&#8592;</button>
+        <button class="week-nav-btn" id="prev-week">
+          <i data-lucide="chevron-left" style="width:16px;height:16px;"></i>
+        </button>
         <span class="week-nav-label" id="week-nav-label">—</span>
-        <button class="week-nav-btn" id="next-week">&#8594;</button>
+        <button class="week-nav-btn" id="next-week">
+          <i data-lucide="chevron-right" style="width:16px;height:16px;"></i>
+        </button>
       </div>
     </div>
 
@@ -134,16 +165,23 @@
           <span id="modal-day-label">—</span>
           <small id="modal-day-sub"></small>
         </div>
-        <button class="modal-close" id="modal-close" aria-label="Cerrar">✕</button>
+        <button class="modal-close" id="modal-close" aria-label="Cerrar">
+          <i data-lucide="x" style="width:18px;height:18px;"></i>
+        </button>
       </div>
       <div class="add-form">
         <input type="text" id="event-input" placeholder="Agregar evento…" maxlength="80" autocomplete="off" />
-        <button id="event-add-btn">+ Agregar</button>
+        <button id="event-add-btn">
+          <i data-lucide="plus" style="width:15px;height:15px;vertical-align:middle;margin-right:3px;"></i>
+          Agregar
+        </button>
       </div>
       <div class="event-list" id="event-list"></div>
     </div>
   </div>
 
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script>lucide.createIcons();</script>
   <script src="app.js" type="module"></script>
 </body>
 </html>

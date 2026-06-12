@@ -81,10 +81,10 @@ function applyTheme(theme) {
   const icon  = document.getElementById('theme-icon');
   const label = document.getElementById('theme-label');
   if (theme === 'light') {
-    if (icon)  icon.textContent  = '☀️';
+    if (icon)  { icon.setAttribute('data-lucide', 'sun');  lucide.createIcons(); }
     if (label) label.textContent = 'Modo oscuro';
   } else {
-    if (icon)  icon.textContent  = '🌙';
+    if (icon)  { icon.setAttribute('data-lucide', 'moon'); lucide.createIcons(); }
     if (label) label.textContent = 'Modo claro';
   }
   localStorage.setItem('cal_theme', theme);
@@ -178,12 +178,12 @@ function renderEventList() {
       item.innerHTML = `
         <div class="event-color-bar event-color-bar--fixed"></div>
         <span class="event-text">${ev.text}</span>
-        <span class="event-fixed-badge">⚽ Mundial</span>`;
+        <span class="event-fixed-badge"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg> Mundial</span>`;
     } else {
       item.innerHTML = `
         <div class="event-color-bar"></div>
         <span class="event-text">${ev.text}</span>
-        <button class="event-delete" data-id="${ev.id}" aria-label="Eliminar">✕</button>`;
+        <button class="event-delete" data-id="${ev.id}" aria-label="Eliminar"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
     }
     eventList.appendChild(item);
   });
