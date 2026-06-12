@@ -1,15 +1,22 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { 
-  getFirestore, 
-  collection, 
-  addDoc, 
-  deleteDoc, 
-  doc, 
-  onSnapshot, 
-  serverTimestamp 
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// Firebase Configuration
+// ── Firebase Config ──
 const firebaseConfig = {
   apiKey: "AIzaSyD0rZNSzXjJKVWAx5NyllTlGSh2Sp51ymQ",
   authDomain: "calendario-2026-e87a4.firebaseapp.com",
@@ -21,10 +28,12 @@ const firebaseConfig = {
   measurementId: "G-HH72LTL61S"
 };
 
-// Initialize Firebase & Firestore
-const appApp = initializeApp(firebaseConfig);
-const db = getFirestore(appApp);
+const firebaseApp = initializeApp(firebaseConfig);
+const db          = getFirestore(firebaseApp);
+const auth        = getAuth(firebaseApp);
+const provider    = new GoogleAuthProvider();
 
+// ── Calendar Constants ──
 const START = new Date(2026, 5, 11);
 const END   = new Date(2026, 7, 10);
 const TODAY = new Date();
@@ -34,20 +43,88 @@ const DAY_NAMES   = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes',
 const DAY_SHORT   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-// ── In-Memory Event Cache ──
-let dbEvents = [];
+// ── State ──
+let dbEvents   = [];
+let currentUid = null;
+let unsubSnapshot = null;
 
-// ── Storage Helpers (Firestore adapters) ──
+// ── Helpers ──
 function loadEvents(d) {
   const dateStr = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
   return dbEvents.filter(ev => ev.date === dateStr);
 }
 
-function sameDay(a, b) { 
-  return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); 
+function sameDay(a, b) {
+  return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
 }
 
-// ── Modal Lógica ──
+// ── Auth UI ──
+const loginOverlay = document.getElementById('login-overlay');
+const loginBtn     = document.getElementById('login-btn');
+const logoutBtn    = document.getElementById('logout-btn');
+const userAvatar   = document.getElementById('user-avatar');
+const userName     = document.getElementById('user-name');
+
+loginBtn.addEventListener('click', () => {
+  signInWithPopup(auth, provider).catch(err => console.error("Error al iniciar sesión:", err));
+});
+
+logoutBtn.addEventListener('click', () => {
+  signOut(auth).catch(err => console.error("Error al cerrar sesión:", err));
+});
+
+// ── Auth State Listener ──
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    // Usuario autenticado → ocultar login, mostrar app
+    currentUid = user.uid;
+    loginOverlay.style.display = 'none';
+
+    // Mostrar perfil
+    userAvatar.src = user.photoURL || '';
+    userName.textContent = user.displayName || user.email;
+
+    // Suscribirse a los eventos del usuario en Firestore
+    subscribeToUserEvents(user.uid);
+
+    // Inicializar calendario si aún no se ha hecho
+    if (!document.getElementById('months').hasChildNodes()) {
+      initCalendar();
+    }
+  } else {
+    // No autenticado → mostrar login, limpiar estado
+    currentUid = null;
+    loginOverlay.style.display = 'flex';
+    if (unsubSnapshot) {
+      unsubSnapshot();
+      unsubSnapshot = null;
+    }
+    dbEvents = [];
+  }
+});
+
+// ── Firestore Suscripción por Usuario ──
+function subscribeToUserEvents(uid) {
+  if (unsubSnapshot) unsubSnapshot(); // Cancelar suscripción anterior
+  const eventsRef = collection(db, "users", uid, "events");
+  unsubSnapshot = onSnapshot(eventsRef, (snapshot) => {
+    dbEvents = [];
+    snapshot.forEach(docSnapshot => {
+      dbEvents.push({ id: docSnapshot.id, ...docSnapshot.data() });
+    });
+    dbEvents.sort((a, b) => {
+      const aTime = a.createdAt?.seconds || 0;
+      const bTime = b.createdAt?.seconds || 0;
+      return aTime - bTime;
+    });
+    refreshAllDots();
+    renderTodayEvents();
+    renderUpcomingEvents();
+    renderEventList();
+  });
+}
+
+// ── Modal ──
 let activeDate = null;
 const overlay    = document.getElementById('modal-overlay');
 const modalClose = document.getElementById('modal-close');
@@ -67,9 +144,9 @@ function openModal(date) {
   setTimeout(() => eventInput.focus(), 50);
 }
 
-function closeModal() { 
-  overlay.classList.remove('open'); 
-  activeDate = null; 
+function closeModal() {
+  overlay.classList.remove('open');
+  activeDate = null;
 }
 
 function renderEventList() {
@@ -93,27 +170,26 @@ function renderEventList() {
 
 async function addEvent() {
   const text = eventInput.value.trim();
-  if (!text || !activeDate) return;
-  
+  if (!text || !activeDate || !currentUid) return;
   const dateStr = `${activeDate.getFullYear()}-${activeDate.getMonth()}-${activeDate.getDate()}`;
   eventInput.value = '';
-  
   try {
-    await addDoc(collection(db, "events"), {
+    await addDoc(collection(db, "users", currentUid, "events"), {
       date: dateStr,
-      text: text,
+      text,
       createdAt: serverTimestamp()
     });
   } catch (err) {
-    console.error("Error al añadir evento a Firestore:", err);
+    console.error("Error al añadir evento:", err);
   }
 }
 
 async function deleteEvent(id) {
+  if (!currentUid) return;
   try {
-    await deleteDoc(doc(db, "events", id));
+    await deleteDoc(doc(db, "users", currentUid, "events", id));
   } catch (err) {
-    console.error("Error al eliminar evento de Firestore:", err);
+    console.error("Error al eliminar evento:", err);
   }
 }
 
@@ -132,12 +208,11 @@ function refreshAllDots() {
     const key = cell.getAttribute('data-key');
     if (!key) return;
     const parts = key.split('-').map(Number);
-    const date = new Date(parts[0], parts[1], parts[2]);
-    refreshDots(date);
+    refreshDots(new Date(parts[0], parts[1], parts[2]));
   });
 }
 
-// ── Today's Events ──
+// ── Widgets ──
 function renderTodayEvents() {
   const listEl = document.getElementById('today-events-list');
   if (!listEl) return;
@@ -155,56 +230,39 @@ function renderTodayEvents() {
   });
 }
 
-// ── Upcoming Events ──
 function renderUpcomingEvents() {
   const listEl = document.getElementById('upcoming-events-list');
   if (!listEl) return;
   listEl.innerHTML = '';
-  
   const upcoming = [];
   const scanDate = new Date(TODAY);
-  
   while (scanDate <= END) {
-    const evs = loadEvents(scanDate);
-    if (evs.length) {
-      evs.forEach(ev => {
-        upcoming.push({
-          date: new Date(scanDate),
-          text: ev.text
-        });
-      });
-    }
+    loadEvents(scanDate).forEach(ev => upcoming.push({ date: new Date(scanDate), text: ev.text }));
     if (upcoming.length >= 4) break;
     scanDate.setDate(scanDate.getDate() + 1);
   }
-  
   if (!upcoming.length) {
     listEl.innerHTML = '<p class="upcoming-no-events">No hay próximos eventos programados</p>';
     return;
   }
-  
   upcoming.slice(0, 4).forEach(item => {
-    const dayNum = item.date.getDate();
-    const monthName = MONTH_NAMES[item.date.getMonth()].slice(0, 3);
-    const dayName = DAY_SHORT[item.date.getDay()];
-    
     const el = document.createElement('div');
     el.className = 'upcoming-event-item';
     el.innerHTML = `
       <div class="upcoming-date-badge">
-        <span class="up-day">${dayNum}</span>
-        <span class="up-month">${monthName}</span>
+        <span class="up-day">${item.date.getDate()}</span>
+        <span class="up-month">${MONTH_NAMES[item.date.getMonth()].slice(0, 3)}</span>
       </div>
       <div class="upcoming-details">
         <span class="upcoming-text">${item.text}</span>
-        <span class="upcoming-weekday">${dayName}</span>
-      </div>
-    `;
+        <span class="upcoming-weekday">${DAY_SHORT[item.date.getDay()]}</span>
+      </div>`;
     el.addEventListener('click', () => openModal(item.date));
     listEl.appendChild(el);
   });
 }
 
+// ── Event Listeners ──
 modalClose.addEventListener('click', closeModal);
 overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
 addBtn.addEventListener('click', addEvent);
@@ -216,7 +274,7 @@ eventList.addEventListener('click', e => {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 document.getElementById('manage-today-btn').addEventListener('click', () => openModal(TODAY));
 
-// ── Render months ──
+// ── Render Calendar ──
 function renderMonth(year, month) {
   const block = document.createElement('div');
   block.className = 'month-block';
@@ -276,7 +334,6 @@ function renderMonth(year, month) {
 
     const dotsEl = document.createElement('div');
     dotsEl.className = 'cell-dots';
-    // Will be populated asynchronously via snapshot listener
     cell.appendChild(dotsEl);
 
     if (inRange) cell.addEventListener('click', () => openModal(date));
@@ -287,42 +344,20 @@ function renderMonth(year, month) {
   return block;
 }
 
-const container = document.getElementById('months');
-container.appendChild(renderMonth(2026, 5));
-container.appendChild(renderMonth(2026, 6));
-container.appendChild(renderMonth(2026, 7));
+function initCalendar() {
+  const container = document.getElementById('months');
+  container.appendChild(renderMonth(2026, 5));
+  container.appendChild(renderMonth(2026, 6));
+  container.appendChild(renderMonth(2026, 7));
 
-// Countdown
-document.getElementById('days-left').textContent =
-  Math.max(0, Math.ceil((END - TODAY) / 86400000));
+  // Countdown
+  document.getElementById('days-left').textContent =
+    Math.max(0, Math.ceil((END - TODAY) / 86400000));
 
-// Progress
-const totalMs   = END - START;
-const elapsedMs = Math.max(0, Math.min(TODAY - START, totalMs));
-const pct       = Math.round((elapsedMs / totalMs) * 100);
-document.getElementById('pct').textContent = pct + '%';
-setTimeout(() => { document.getElementById('progress-fill').style.width = pct + '%'; }, 600);
-
-// ── Real-Time Sync with Firestore ──
-onSnapshot(collection(db, "events"), (snapshot) => {
-  dbEvents = [];
-  snapshot.forEach(docSnapshot => {
-    dbEvents.push({
-      id: docSnapshot.id,
-      ...docSnapshot.data()
-    });
-  });
-
-  // Sort by createdAt timestamp (safely handling null/missing timestamps from local optimistic writes)
-  dbEvents.sort((a, b) => {
-    const aTime = a.createdAt?.seconds || Date.now() / 1000;
-    const bTime = b.createdAt?.seconds || Date.now() / 1000;
-    return aTime - bTime;
-  });
-
-  // Refresh UI
-  refreshAllDots();
-  renderTodayEvents();
-  renderUpcomingEvents();
-  renderEventList(); // Updates modal list if open
-});
+  // Progress
+  const totalMs   = END - START;
+  const elapsedMs = Math.max(0, Math.min(TODAY - START, totalMs));
+  const pct       = Math.round((elapsedMs / totalMs) * 100);
+  document.getElementById('pct').textContent = pct + '%';
+  setTimeout(() => { document.getElementById('progress-fill').style.width = pct + '%'; }, 600);
+}
