@@ -1,22 +1,14 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import {
-  getFirestore,
-  collection,
-  addDoc,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  serverTimestamp
+  getFirestore, collection, addDoc, deleteDoc,
+  doc, onSnapshot, serverTimestamp, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import {
-  getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signOut,
-  onAuthStateChanged
+  getAuth, GoogleAuthProvider, signInWithPopup,
+  signOut, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// ── Firebase Config ──
+// ── Firebase ──
 const firebaseConfig = {
   apiKey: "AIzaSyD0rZNSzXjJKVWAx5NyllTlGSh2Sp51ymQ",
   authDomain: "calendario-2026-e87a4.firebaseapp.com",
@@ -27,13 +19,12 @@ const firebaseConfig = {
   appId: "1:797560696833:web:7d8fafc93962b44cc1d000",
   measurementId: "G-HH72LTL61S"
 };
-
 const firebaseApp = initializeApp(firebaseConfig);
 const db          = getFirestore(firebaseApp);
 const auth        = getAuth(firebaseApp);
 const provider    = new GoogleAuthProvider();
 
-// ── Calendar Constants ──
+// ── Constants ──
 const START = new Date(2026, 5, 11);
 const END   = new Date(2026, 7, 10);
 const TODAY = new Date();
@@ -44,87 +35,101 @@ const DAY_SHORT   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 // ── State ──
-let dbEvents   = [];
-let currentUid = null;
-let unsubSnapshot = null;
+let dbEvents         = [];
+let currentUid       = null;
+let unsubSnapshot    = null;
+let currentView      = 'month';
+let currentWeekStart = getWeekStart(TODAY);
+let draggedEvent     = null;
 
 // ── Helpers ──
 function loadEvents(d) {
-  const dateStr = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-  return dbEvents.filter(ev => ev.date === dateStr);
+  const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  return dbEvents.filter(ev => ev.date === key);
 }
-
 function sameDay(a, b) {
   return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
 }
+function getWeekStart(date) {
+  const d = new Date(date);
+  d.setDate(d.getDate() - d.getDay());
+  d.setHours(0,0,0,0);
+  return d;
+}
 
-// ── Auth UI ──
+// ══════════════════════════════════════════════════
+//  THEME
+// ══════════════════════════════════════════════════
+function initTheme() {
+  applyTheme(localStorage.getItem('cal_theme') || 'dark');
+}
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const icon  = document.getElementById('theme-icon');
+  const label = document.getElementById('theme-label');
+  if (theme === 'light') {
+    if (icon)  icon.textContent  = '☀️';
+    if (label) label.textContent = 'Modo oscuro';
+  } else {
+    if (icon)  icon.textContent  = '🌙';
+    if (label) label.textContent = 'Modo claro';
+  }
+  localStorage.setItem('cal_theme', theme);
+}
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+  applyTheme(cur === 'dark' ? 'light' : 'dark');
+}
+document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+initTheme();
+
+// ══════════════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════════════
 const loginOverlay = document.getElementById('login-overlay');
-const loginBtn     = document.getElementById('login-btn');
-const logoutBtn    = document.getElementById('logout-btn');
 const userAvatar   = document.getElementById('user-avatar');
 const userName     = document.getElementById('user-name');
 
-loginBtn.addEventListener('click', () => {
+document.getElementById('login-btn').addEventListener('click', () => {
   signInWithPopup(auth, provider).catch(err => console.error("Error al iniciar sesión:", err));
 });
-
-logoutBtn.addEventListener('click', () => {
+document.getElementById('logout-btn').addEventListener('click', () => {
   signOut(auth).catch(err => console.error("Error al cerrar sesión:", err));
 });
 
-// ── Auth State Listener ──
 onAuthStateChanged(auth, (user) => {
   if (user) {
-    // Usuario autenticado → ocultar login, mostrar app
     currentUid = user.uid;
     loginOverlay.style.display = 'none';
-
-    // Mostrar perfil
     userAvatar.src = user.photoURL || '';
     userName.textContent = user.displayName || user.email;
-
-    // Suscribirse a los eventos del usuario en Firestore
     subscribeToUserEvents(user.uid);
-
-    // Inicializar calendario si aún no se ha hecho
-    if (!document.getElementById('months').hasChildNodes()) {
-      initCalendar();
-    }
+    if (!document.getElementById('months').hasChildNodes()) initCalendar();
   } else {
-    // No autenticado → mostrar login, limpiar estado
     currentUid = null;
     loginOverlay.style.display = 'flex';
-    if (unsubSnapshot) {
-      unsubSnapshot();
-      unsubSnapshot = null;
-    }
+    if (unsubSnapshot) { unsubSnapshot(); unsubSnapshot = null; }
     dbEvents = [];
   }
 });
 
-// ── Firestore Suscripción por Usuario ──
 function subscribeToUserEvents(uid) {
-  if (unsubSnapshot) unsubSnapshot(); // Cancelar suscripción anterior
-  const eventsRef = collection(db, "users", uid, "events");
-  unsubSnapshot = onSnapshot(eventsRef, (snapshot) => {
+  if (unsubSnapshot) unsubSnapshot();
+  unsubSnapshot = onSnapshot(collection(db, "users", uid, "events"), (snap) => {
     dbEvents = [];
-    snapshot.forEach(docSnapshot => {
-      dbEvents.push({ id: docSnapshot.id, ...docSnapshot.data() });
-    });
-    dbEvents.sort((a, b) => {
-      const aTime = a.createdAt?.seconds || 0;
-      const bTime = b.createdAt?.seconds || 0;
-      return aTime - bTime;
-    });
+    snap.forEach(d => dbEvents.push({ id: d.id, ...d.data() }));
+    dbEvents.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
     refreshAllDots();
     renderTodayEvents();
     renderUpcomingEvents();
     renderEventList();
+    if (currentView === 'week') renderWeekView();
   });
 }
 
-// ── Modal ──
+// ══════════════════════════════════════════════════
+//  MODAL
+// ══════════════════════════════════════════════════
 let activeDate = null;
 const overlay    = document.getElementById('modal-overlay');
 const modalClose = document.getElementById('modal-close');
@@ -143,11 +148,7 @@ function openModal(date) {
   overlay.classList.add('open');
   setTimeout(() => eventInput.focus(), 50);
 }
-
-function closeModal() {
-  overlay.classList.remove('open');
-  activeDate = null;
-}
+function closeModal() { overlay.classList.remove('open'); activeDate = null; }
 
 function renderEventList() {
   if (!activeDate) return;
@@ -157,7 +158,7 @@ function renderEventList() {
     eventList.innerHTML = '<p class="no-events">Sin eventos. ¡Agrega uno!</p>';
     return;
   }
-  evs.forEach((ev) => {
+  evs.forEach(ev => {
     const item = document.createElement('div');
     item.className = 'event-item';
     item.innerHTML = `
@@ -175,94 +176,209 @@ async function addEvent() {
   eventInput.value = '';
   try {
     await addDoc(collection(db, "users", currentUid, "events"), {
-      date: dateStr,
-      text,
-      createdAt: serverTimestamp()
+      date: dateStr, text, createdAt: serverTimestamp()
     });
-  } catch (err) {
-    console.error("Error al añadir evento:", err);
-  }
+    launchConfetti();
+  } catch (err) { console.error("Error al añadir evento:", err); }
 }
 
 async function deleteEvent(id) {
   if (!currentUid) return;
-  try {
-    await deleteDoc(doc(db, "users", currentUid, "events", id));
-  } catch (err) {
-    console.error("Error al eliminar evento:", err);
-  }
+  try { await deleteDoc(doc(db, "users", currentUid, "events", id)); }
+  catch (err) { console.error("Error al eliminar:", err); }
 }
 
+async function moveEvent(evData, targetDate) {
+  if (!currentUid) return;
+  const newKey = `${targetDate.getFullYear()}-${targetDate.getMonth()}-${targetDate.getDate()}`;
+  if (newKey === evData.dateStr) return;
+  try { await updateDoc(doc(db, "users", currentUid, "events", evData.id), { date: newKey }); }
+  catch (err) { console.error("Error al mover evento:", err); }
+}
+
+// ── Dots ──
 function refreshDots(date) {
   const key  = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
   const cell = document.querySelector(`.day-cell[data-key="${key}"]`);
   if (!cell) return;
   const dotsEl = cell.querySelector('.cell-dots');
   if (!dotsEl) return;
-  const evs = loadEvents(date);
-  dotsEl.innerHTML = evs.slice(0,3).map(() => '<span class="cell-dot"></span>').join('');
+  dotsEl.innerHTML = loadEvents(date).slice(0,3).map(() => '<span class="cell-dot"></span>').join('');
 }
-
 function refreshAllDots() {
   document.querySelectorAll('.day-cell.in-range').forEach(cell => {
-    const key = cell.getAttribute('data-key');
-    if (!key) return;
-    const parts = key.split('-').map(Number);
-    refreshDots(new Date(parts[0], parts[1], parts[2]));
+    const k = cell.getAttribute('data-key');
+    if (!k) return;
+    const [y,m,d] = k.split('-').map(Number);
+    refreshDots(new Date(y, m, d));
   });
 }
 
-// ── Widgets ──
+// ══════════════════════════════════════════════════
+//  WIDGETS
+// ══════════════════════════════════════════════════
 function renderTodayEvents() {
-  const listEl = document.getElementById('today-events-list');
-  if (!listEl) return;
-  listEl.innerHTML = '';
+  const el = document.getElementById('today-events-list');
+  if (!el) return;
+  el.innerHTML = '';
   const evs = loadEvents(TODAY);
-  if (!evs.length) {
-    listEl.innerHTML = '<p class="today-no-events">No hay eventos para hoy</p>';
-    return;
-  }
+  if (!evs.length) { el.innerHTML = '<p class="today-no-events">No hay eventos para hoy</p>'; return; }
   evs.forEach(ev => {
     const item = document.createElement('div');
     item.className = 'today-event-item';
     item.innerHTML = `<span class="event-text">${ev.text}</span>`;
-    listEl.appendChild(item);
+    el.appendChild(item);
   });
 }
 
 function renderUpcomingEvents() {
-  const listEl = document.getElementById('upcoming-events-list');
-  if (!listEl) return;
-  listEl.innerHTML = '';
+  const el = document.getElementById('upcoming-events-list');
+  if (!el) return;
+  el.innerHTML = '';
   const upcoming = [];
-  const scanDate = new Date(TODAY);
-  while (scanDate <= END) {
-    loadEvents(scanDate).forEach(ev => upcoming.push({ date: new Date(scanDate), text: ev.text }));
+  const scan = new Date(TODAY);
+  while (scan <= END) {
+    loadEvents(scan).forEach(ev => upcoming.push({ date: new Date(scan), text: ev.text }));
     if (upcoming.length >= 4) break;
-    scanDate.setDate(scanDate.getDate() + 1);
+    scan.setDate(scan.getDate() + 1);
   }
-  if (!upcoming.length) {
-    listEl.innerHTML = '<p class="upcoming-no-events">No hay próximos eventos programados</p>';
-    return;
-  }
+  if (!upcoming.length) { el.innerHTML = '<p class="upcoming-no-events">No hay próximos eventos programados</p>'; return; }
   upcoming.slice(0, 4).forEach(item => {
-    const el = document.createElement('div');
-    el.className = 'upcoming-event-item';
-    el.innerHTML = `
+    const div = document.createElement('div');
+    div.className = 'upcoming-event-item';
+    div.innerHTML = `
       <div class="upcoming-date-badge">
         <span class="up-day">${item.date.getDate()}</span>
-        <span class="up-month">${MONTH_NAMES[item.date.getMonth()].slice(0, 3)}</span>
+        <span class="up-month">${MONTH_NAMES[item.date.getMonth()].slice(0,3)}</span>
       </div>
       <div class="upcoming-details">
         <span class="upcoming-text">${item.text}</span>
         <span class="upcoming-weekday">${DAY_SHORT[item.date.getDay()]}</span>
       </div>`;
-    el.addEventListener('click', () => openModal(item.date));
-    listEl.appendChild(el);
+    div.addEventListener('click', () => openModal(item.date));
+    el.appendChild(div);
   });
 }
 
-// ── Event Listeners ──
+// ══════════════════════════════════════════════════
+//  VIEW MANAGEMENT
+// ══════════════════════════════════════════════════
+function setView(view) {
+  currentView = view;
+  const monthsEl = document.getElementById('months');
+  const weekEl   = document.getElementById('week-view');
+  const weekNav  = document.getElementById('week-nav');
+  const btnM     = document.getElementById('btn-month-view');
+  const btnW     = document.getElementById('btn-week-view');
+
+  if (view === 'month') {
+    monthsEl.style.display = '';
+    weekEl.style.display   = 'none';
+    weekNav.style.display  = 'none';
+    btnM.classList.add('active');
+    btnW.classList.remove('active');
+  } else {
+    monthsEl.style.display = 'none';
+    weekEl.style.display   = '';
+    weekNav.style.display  = 'flex';
+    btnM.classList.remove('active');
+    btnW.classList.add('active');
+    renderWeekView();
+  }
+}
+
+// ══════════════════════════════════════════════════
+//  WEEK VIEW
+// ══════════════════════════════════════════════════
+function renderWeekView() {
+  const weekEl = document.getElementById('week-view');
+  weekEl.innerHTML = '';
+
+  // Nav label
+  const weekEnd = new Date(currentWeekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+  const navLabel = document.getElementById('week-nav-label');
+  if (navLabel) {
+    navLabel.textContent =
+      `${currentWeekStart.getDate()} ${MONTH_NAMES[currentWeekStart.getMonth()].slice(0,3)} – ` +
+      `${weekEnd.getDate()} ${MONTH_NAMES[weekEnd.getMonth()].slice(0,3)} ${weekEnd.getFullYear()}`;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'week-grid';
+
+  for (let i = 0; i < 7; i++) {
+    const date      = new Date(currentWeekStart);
+    date.setDate(date.getDate() + i);
+    const isToday   = sameDay(date, TODAY);
+    const isEnd     = sameDay(date, END);
+    const inRange   = date >= START && date <= END;
+    const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+    const dateStr   = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+
+    const col = document.createElement('div');
+    col.className = 'week-col' +
+      (isToday   ? ' week-col-today'   : '') +
+      (isEnd     ? ' week-col-end'     : '') +
+      (isWeekend ? ' week-col-weekend' : '') +
+      (!inRange  ? ' week-col-out'     : '');
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'week-col-header';
+    header.innerHTML = `
+      <span class="week-day-name">${DAY_SHORT[date.getDay()]}</span>
+      <span class="week-day-num ${isToday ? 'week-today-num' : ''} ${isEnd ? 'week-end-num' : ''}">${date.getDate()}</span>`;
+    col.appendChild(header);
+
+    // Events area
+    const eventsDiv = document.createElement('div');
+    eventsDiv.className = 'week-events';
+
+    if (inRange) {
+      loadEvents(date).forEach(ev => {
+        const card = document.createElement('div');
+        card.className = 'week-event-card';
+        card.draggable = true;
+        card.innerHTML = `<span class="week-event-text">${ev.text}</span>`;
+        card.dataset.id   = ev.id;
+        card.dataset.date = dateStr;
+
+        card.addEventListener('dragstart', e => {
+          draggedEvent = { id: ev.id, dateStr };
+          e.dataTransfer.effectAllowed = 'move';
+          setTimeout(() => card.classList.add('dragging'), 0);
+        });
+        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+        eventsDiv.appendChild(card);
+      });
+
+      // Add button
+      const addBtnEl = document.createElement('button');
+      addBtnEl.className = 'week-add-btn';
+      addBtnEl.textContent = '+ Agregar';
+      addBtnEl.addEventListener('click', () => openModal(date));
+      eventsDiv.appendChild(addBtnEl);
+
+      // Drop zone
+      col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('drag-over'); });
+      col.addEventListener('dragleave', e => { if (!col.contains(e.relatedTarget)) col.classList.remove('drag-over'); });
+      col.addEventListener('drop', e => {
+        e.preventDefault();
+        col.classList.remove('drag-over');
+        if (draggedEvent) { moveEvent(draggedEvent, date); draggedEvent = null; }
+      });
+    }
+
+    col.appendChild(eventsDiv);
+    grid.appendChild(col);
+  }
+  weekEl.appendChild(grid);
+}
+
+// ══════════════════════════════════════════════════
+//  EVENT LISTENERS
+// ══════════════════════════════════════════════════
 modalClose.addEventListener('click', closeModal);
 overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
 addBtn.addEventListener('click', addEvent);
@@ -273,8 +389,20 @@ eventList.addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 document.getElementById('manage-today-btn').addEventListener('click', () => openModal(TODAY));
+document.getElementById('btn-month-view').addEventListener('click', () => setView('month'));
+document.getElementById('btn-week-view').addEventListener('click', () => setView('week'));
+document.getElementById('prev-week').addEventListener('click', () => {
+  currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+  renderWeekView();
+});
+document.getElementById('next-week').addEventListener('click', () => {
+  currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+  renderWeekView();
+});
 
-// ── Render Calendar ──
+// ══════════════════════════════════════════════════
+//  MONTH RENDERER
+// ══════════════════════════════════════════════════
 function renderMonth(year, month) {
   const block = document.createElement('div');
   block.className = 'month-block';
@@ -312,7 +440,6 @@ function renderMonth(year, month) {
     const date    = new Date(year, month, d);
     const cell    = document.createElement('div');
     const dateKey = `${year}-${month}-${d}`;
-
     const isToday   = sameDay(date, TODAY);
     const isEnd     = sameDay(date, END);
     const isWeekend = date.getDay()===0 || date.getDay()===6;
@@ -350,14 +477,63 @@ function initCalendar() {
   container.appendChild(renderMonth(2026, 6));
   container.appendChild(renderMonth(2026, 7));
 
-  // Countdown
   document.getElementById('days-left').textContent =
     Math.max(0, Math.ceil((END - TODAY) / 86400000));
 
-  // Progress
   const totalMs   = END - START;
   const elapsedMs = Math.max(0, Math.min(TODAY - START, totalMs));
   const pct       = Math.round((elapsedMs / totalMs) * 100);
   document.getElementById('pct').textContent = pct + '%';
   setTimeout(() => { document.getElementById('progress-fill').style.width = pct + '%'; }, 600);
+}
+
+// ══════════════════════════════════════════════════
+//  CONFETTI 🎉
+// ══════════════════════════════════════════════════
+function launchConfetti() {
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;';
+  document.body.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  const colors = ['#7c7aaa','#b07080','#c8a96e','#5a8f7f','#a06070','#6b9abf','#d4a5c9'];
+  const particles = Array.from({ length: 72 }, () => ({
+    x:         Math.random() * canvas.width,
+    y:         Math.random() * canvas.height * 0.35 - 10,
+    r:         Math.random() * 5 + 3,
+    color:     colors[Math.floor(Math.random() * colors.length)],
+    speed:     Math.random() * 2 + 1.2,
+    wobble:    Math.random() * Math.PI * 2,
+    wobbleInc: Math.random() * 0.06 + 0.02,
+    rotation:  Math.random() * 360,
+    rotSpeed:  (Math.random() - 0.5) * 5,
+  }));
+
+  let frame = 0;
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    frame++;
+    const alpha = frame < 80 ? 1 : Math.max(0, 1 - (frame - 80) / 40);
+
+    particles.forEach(p => {
+      p.y        += p.speed;
+      p.wobble   += p.wobbleInc;
+      p.x        += Math.sin(p.wobble) * 1.2;
+      p.rotation += p.rotSpeed;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(p.x, p.y);
+      ctx.rotate((p.rotation * Math.PI) / 180);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.r / 2, -p.r, p.r, p.r * 2);
+      ctx.restore();
+    });
+
+    if (frame < 120) requestAnimationFrame(animate);
+    else canvas.remove();
+  }
+  animate();
 }
