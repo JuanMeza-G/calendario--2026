@@ -103,8 +103,14 @@ const loginOverlay = document.getElementById('login-overlay');
 const userAvatar   = document.getElementById('user-avatar');
 const userName     = document.getElementById('user-name');
 
-document.getElementById('login-btn').addEventListener('click', () => {
-  signInWithPopup(auth, provider).catch(err => console.error("Error al iniciar sesión:", err));
+const loginBtn = document.getElementById('login-btn');
+loginBtn.addEventListener('click', () => {
+  loginBtn.classList.add('loading');
+  signInWithPopup(auth, provider)
+    .catch(err => {
+      console.error("Error al iniciar sesión:", err);
+      loginBtn.classList.remove('loading');
+    });
 });
 document.getElementById('logout-btn').addEventListener('click', () => {
   signOut(auth).catch(err => console.error("Error al cerrar sesión:", err));
@@ -114,6 +120,7 @@ onAuthStateChanged(auth, (user) => {
   if (user) {
     currentUid = user.uid;
     loginOverlay.style.display = 'none';
+    loginBtn.classList.remove('loading');
     userAvatar.src = user.photoURL || '';
     userName.textContent = user.displayName || user.email;
     subscribeToUserEvents(user.uid);
@@ -171,9 +178,10 @@ function renderEventList() {
     eventList.innerHTML = '<p class="no-events">Sin eventos. ¡Agrega uno!</p>';
     return;
   }
-  evs.forEach(ev => {
+  evs.forEach((ev, i) => {
     const item = document.createElement('div');
     item.className = ev.fixed ? 'event-item event-item--fixed' : 'event-item';
+    item.style.animationDelay = `${i * 55}ms`;   // stagger
     if (ev.fixed) {
       item.innerHTML = `
         <div class="event-color-bar event-color-bar--fixed"></div>
@@ -191,7 +199,16 @@ function renderEventList() {
 
 async function addEvent() {
   const text = eventInput.value.trim();
-  if (!text || !activeDate || !currentUid) return;
+  if (!text) {
+    // Shake + borde rojo si está vacío
+    eventInput.classList.remove('input-error');
+    void eventInput.offsetWidth; // reflow para reiniciar animación
+    eventInput.classList.add('input-error');
+    eventInput.addEventListener('animationend', () => eventInput.classList.remove('input-error'), { once: true });
+    eventInput.focus();
+    return;
+  }
+  if (!activeDate || !currentUid) return;
   const dateStr = `${activeDate.getFullYear()}-${activeDate.getMonth()}-${activeDate.getDate()}`;
   eventInput.value = '';
   try {
@@ -199,13 +216,35 @@ async function addEvent() {
       date: dateStr, text, createdAt: serverTimestamp()
     });
     launchConfetti();
+    showToast('✨', `Evento agregado`);
   } catch (err) { console.error("Error al añadir evento:", err); }
 }
 
 async function deleteEvent(id) {
   if (!currentUid) return;
-  try { await deleteDoc(doc(db, "users", currentUid, "events", id)); }
-  catch (err) { console.error("Error al eliminar:", err); }
+
+  // Guardar datos del evento para posible undo
+  const evData = dbEvents.find(e => e.id === id);
+  if (!evData) return;
+
+  // Marcar visualmente como eliminado inmediatamente
+  const itemEl = eventList.querySelector(`[data-id="${id}"]`)?.closest('.event-item');
+  if (itemEl) { itemEl.style.opacity = '.35'; itemEl.style.pointerEvents = 'none'; }
+
+  let cancelled = false;
+  let timer;
+
+  showToast('🗑️', `Evento eliminado`, true, () => {
+    cancelled = true;
+    clearTimeout(timer);
+    if (itemEl) { itemEl.style.opacity = ''; itemEl.style.pointerEvents = ''; }
+  });
+
+  timer = setTimeout(async () => {
+    if (cancelled) return;
+    try { await deleteDoc(doc(db, "users", currentUid, "events", id)); }
+    catch (err) { console.error("Error al eliminar:", err); }
+  }, 4000);
 }
 
 async function moveEvent(evData, targetDate) {
@@ -400,6 +439,43 @@ function renderWeekView() {
 }
 
 // ══════════════════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════════════════
+const toastContainer = document.getElementById('toast-container');
+
+function showToast(icon, msg, withUndo = false, onUndo = null) {
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.innerHTML = `
+    <span class="toast-icon">${icon}</span>
+    <span class="toast-msg">${msg}</span>
+    ${withUndo ? '<button class="toast-undo">Deshacer</button>' : ''}
+  `;
+
+  if (withUndo && onUndo) {
+    toast.querySelector('.toast-undo').addEventListener('click', () => {
+      onUndo();
+      dismissToast(toast);
+    });
+  }
+
+  toastContainer.appendChild(toast);
+
+  const timer = setTimeout(() => dismissToast(toast), 4000);
+  toast.addEventListener('click', e => {
+    if (!e.target.classList.contains('toast-undo')) {
+      clearTimeout(timer);
+      dismissToast(toast);
+    }
+  });
+}
+
+function dismissToast(toast) {
+  toast.classList.add('toast-out');
+  toast.addEventListener('animationend', () => toast.remove(), { once: true });
+}
+
+// ══════════════════════════════════════════════════
 //  EVENT LISTENERS
 // ══════════════════════════════════════════════════
 modalClose.addEventListener('click', closeModal);
@@ -500,14 +576,68 @@ function initCalendar() {
   container.appendChild(renderMonth(2026, 6));
   container.appendChild(renderMonth(2026, 7));
 
-  document.getElementById('days-left').textContent =
-    Math.max(0, Math.ceil((END - TODAY) / 86400000));
+  // Countdown con animación count-up
+  const targetDays = Math.max(0, Math.ceil((END - TODAY) / 86400000));
+  const daysEl = document.getElementById('days-left');
+  let current = 0;
+  const step = Math.ceil(targetDays / 40);
+  const timer = setInterval(() => {
+    current = Math.min(current + step, targetDays);
+    daysEl.textContent = current;
+    if (current >= targetDays) clearInterval(timer);
+  }, 28);
 
   const totalMs   = END - START;
   const elapsedMs = Math.max(0, Math.min(TODAY - START, totalMs));
   const pct       = Math.round((elapsedMs / totalMs) * 100);
   document.getElementById('pct').textContent = pct + '%';
   setTimeout(() => { document.getElementById('progress-fill').style.width = pct + '%'; }, 600);
+
+  // Dot de pulso en widget de hoy
+  updateTodayDot();
+}
+
+// ══════════════════════════════════════════════════
+//  MOBILE SIDEBAR TOGGLE
+// ══════════════════════════════════════════════════
+const sidebarEl   = document.getElementById('sidebar');
+const backdropEl  = document.getElementById('sidebar-backdrop');
+const toggleBtn   = document.getElementById('sidebar-toggle');
+
+function openSidebar()  { sidebarEl.classList.add('open'); backdropEl.classList.add('open'); }
+function closeSidebar() { sidebarEl.classList.remove('open'); backdropEl.classList.remove('open'); }
+
+toggleBtn.addEventListener('click', () =>
+  sidebarEl.classList.contains('open') ? closeSidebar() : openSidebar()
+);
+backdropEl.addEventListener('click', closeSidebar);
+
+// ══════════════════════════════════════════════════
+//  RIPPLE en botón Agregar
+// ══════════════════════════════════════════════════
+addBtn.addEventListener('click', function(e) {
+  const btn  = this;
+  const rect = btn.getBoundingClientRect();
+  const size = Math.max(rect.width, rect.height);
+  const x    = e.clientX - rect.left - size / 2;
+  const y    = e.clientY - rect.top  - size / 2;
+  const rip  = document.createElement('span');
+  rip.className = 'ripple';
+  rip.style.cssText = `width:${size}px;height:${size}px;left:${x}px;top:${y}px;`;
+  btn.appendChild(rip);
+  rip.addEventListener('animationend', () => rip.remove());
+});
+
+// ══════════════════════════════════════════════════
+//  TODAY WIDGET — dot de pulso
+// ══════════════════════════════════════════════════
+function updateTodayDot() {
+  const label = document.querySelector('.today-events-widget .sb-label');
+  if (!label || label.querySelector('.today-dot-pulse')) return;
+  const dot = document.createElement('span');
+  dot.className = 'today-dot-pulse';
+  dot.style.marginRight = '6px';
+  label.prepend(dot);
 }
 
 // ══════════════════════════════════════════════════
