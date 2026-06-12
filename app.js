@@ -1,3 +1,30 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  deleteDoc, 
+  doc, 
+  onSnapshot, 
+  serverTimestamp 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+// Firebase Configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyD0rZNSzXjJKVWAx5NyllTlGSh2Sp51ymQ",
+  authDomain: "calendario-2026-e87a4.firebaseapp.com",
+  databaseURL: "https://calendario-2026-e87a4-default-rtdb.firebaseio.com",
+  projectId: "calendario-2026-e87a4",
+  storageBucket: "calendario-2026-e87a4.firebasestorage.app",
+  messagingSenderId: "797560696833",
+  appId: "1:797560696833:web:7d8fafc93962b44cc1d000",
+  measurementId: "G-HH72LTL61S"
+};
+
+// Initialize Firebase & Firestore
+const appApp = initializeApp(firebaseConfig);
+const db = getFirestore(appApp);
+
 const START = new Date(2026, 5, 11);
 const END   = new Date(2026, 7, 10);
 const TODAY = new Date();
@@ -7,13 +34,20 @@ const DAY_NAMES   = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes',
 const DAY_SHORT   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-// ── Storage ──
-function storageKey(d)     { return `cal_events_${d.getFullYear()}_${d.getMonth()+1}_${d.getDate()}`; }
-function loadEvents(d)     { try { return JSON.parse(localStorage.getItem(storageKey(d))) || []; } catch { return []; } }
-function saveEvents(d, ev) { localStorage.setItem(storageKey(d), JSON.stringify(ev)); }
-function sameDay(a, b)     { return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+// ── In-Memory Event Cache ──
+let dbEvents = [];
 
-// ── Modal ──
+// ── Storage Helpers (Firestore adapters) ──
+function loadEvents(d) {
+  const dateStr = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  return dbEvents.filter(ev => ev.date === dateStr);
+}
+
+function sameDay(a, b) { 
+  return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); 
+}
+
+// ── Modal Lógica ──
 let activeDate = null;
 const overlay    = document.getElementById('modal-overlay');
 const modalClose = document.getElementById('modal-close');
@@ -33,47 +67,54 @@ function openModal(date) {
   setTimeout(() => eventInput.focus(), 50);
 }
 
-function closeModal() { overlay.classList.remove('open'); activeDate = null; }
+function closeModal() { 
+  overlay.classList.remove('open'); 
+  activeDate = null; 
+}
 
 function renderEventList() {
+  if (!activeDate) return;
   const evs = loadEvents(activeDate);
   eventList.innerHTML = '';
   if (!evs.length) {
     eventList.innerHTML = '<p class="no-events">Sin eventos. ¡Agrega uno!</p>';
     return;
   }
-  evs.forEach((ev, i) => {
+  evs.forEach((ev) => {
     const item = document.createElement('div');
     item.className = 'event-item';
     item.innerHTML = `
       <div class="event-color-bar"></div>
-      <span class="event-text">${ev}</span>
-      <button class="event-delete" data-idx="${i}" aria-label="Eliminar">✕</button>`;
+      <span class="event-text">${ev.text}</span>
+      <button class="event-delete" data-id="${ev.id}" aria-label="Eliminar">✕</button>`;
     eventList.appendChild(item);
   });
 }
 
-function addEvent() {
+async function addEvent() {
   const text = eventInput.value.trim();
   if (!text || !activeDate) return;
-  const evs = loadEvents(activeDate);
-  evs.push(text);
-  saveEvents(activeDate, evs);
+  
+  const dateStr = `${activeDate.getFullYear()}-${activeDate.getMonth()}-${activeDate.getDate()}`;
   eventInput.value = '';
-  renderEventList();
-  refreshDots(activeDate);
-  renderTodayEvents();
-  renderUpcomingEvents();
+  
+  try {
+    await addDoc(collection(db, "events"), {
+      date: dateStr,
+      text: text,
+      createdAt: serverTimestamp()
+    });
+  } catch (err) {
+    console.error("Error al añadir evento a Firestore:", err);
+  }
 }
 
-function deleteEvent(idx) {
-  const evs = loadEvents(activeDate);
-  evs.splice(idx, 1);
-  saveEvents(activeDate, evs);
-  renderEventList();
-  refreshDots(activeDate);
-  renderTodayEvents();
-  renderUpcomingEvents();
+async function deleteEvent(id) {
+  try {
+    await deleteDoc(doc(db, "events", id));
+  } catch (err) {
+    console.error("Error al eliminar evento de Firestore:", err);
+  }
 }
 
 function refreshDots(date) {
@@ -84,6 +125,16 @@ function refreshDots(date) {
   if (!dotsEl) return;
   const evs = loadEvents(date);
   dotsEl.innerHTML = evs.slice(0,3).map(() => '<span class="cell-dot"></span>').join('');
+}
+
+function refreshAllDots() {
+  document.querySelectorAll('.day-cell.in-range').forEach(cell => {
+    const key = cell.getAttribute('data-key');
+    if (!key) return;
+    const parts = key.split('-').map(Number);
+    const date = new Date(parts[0], parts[1], parts[2]);
+    refreshDots(date);
+  });
 }
 
 // ── Today's Events ──
@@ -99,7 +150,7 @@ function renderTodayEvents() {
   evs.forEach(ev => {
     const item = document.createElement('div');
     item.className = 'today-event-item';
-    item.innerHTML = `<span class="event-text">${ev}</span>`;
+    item.innerHTML = `<span class="event-text">${ev.text}</span>`;
     listEl.appendChild(item);
   });
 }
@@ -119,7 +170,7 @@ function renderUpcomingEvents() {
       evs.forEach(ev => {
         upcoming.push({
           date: new Date(scanDate),
-          text: ev
+          text: ev.text
         });
       });
     }
@@ -160,7 +211,7 @@ addBtn.addEventListener('click', addEvent);
 eventInput.addEventListener('keydown', e => { if (e.key === 'Enter') addEvent(); });
 eventList.addEventListener('click', e => {
   const btn = e.target.closest('.event-delete');
-  if (btn) deleteEvent(Number(btn.dataset.idx));
+  if (btn) deleteEvent(btn.dataset.id);
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 document.getElementById('manage-today-btn').addEventListener('click', () => openModal(TODAY));
@@ -225,11 +276,7 @@ function renderMonth(year, month) {
 
     const dotsEl = document.createElement('div');
     dotsEl.className = 'cell-dots';
-    loadEvents(date).slice(0,3).forEach(() => {
-      const dot = document.createElement('span');
-      dot.className = 'cell-dot';
-      dotsEl.appendChild(dot);
-    });
+    // Will be populated asynchronously via snapshot listener
     cell.appendChild(dotsEl);
 
     if (inRange) cell.addEventListener('click', () => openModal(date));
@@ -256,7 +303,26 @@ const pct       = Math.round((elapsedMs / totalMs) * 100);
 document.getElementById('pct').textContent = pct + '%';
 setTimeout(() => { document.getElementById('progress-fill').style.width = pct + '%'; }, 600);
 
-// Initial render of today's events
-renderTodayEvents();
-// Initial render of upcoming events
-renderUpcomingEvents();
+// ── Real-Time Sync with Firestore ──
+onSnapshot(collection(db, "events"), (snapshot) => {
+  dbEvents = [];
+  snapshot.forEach(docSnapshot => {
+    dbEvents.push({
+      id: docSnapshot.id,
+      ...docSnapshot.data()
+    });
+  });
+
+  // Sort by createdAt timestamp (safely handling null/missing timestamps from local optimistic writes)
+  dbEvents.sort((a, b) => {
+    const aTime = a.createdAt?.seconds || Date.now() / 1000;
+    const bTime = b.createdAt?.seconds || Date.now() / 1000;
+    return aTime - bTime;
+  });
+
+  // Refresh UI
+  refreshAllDots();
+  renderTodayEvents();
+  renderUpcomingEvents();
+  renderEventList(); // Updates modal list if open
+});
